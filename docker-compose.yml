@@ -1,0 +1,280 @@
+version: "3.9"
+
+services:
+  # ===========================================
+  # vLLM - GPT-OSS Server (Blackwell with MXFP4)
+  # ===========================================
+  vllm:
+    image: vllm/vllm-openai:v0.12.0
+    container_name: vllm
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./vllm/models:/root/.cache/huggingface
+      - ./vllm/tiktoken_cache:/tiktoken_cache:ro
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}
+      # Fix for Blackwell (sm_121a) - use system ptxas instead of Triton's bundled one
+      - TRITON_PTXAS_PATH=/usr/local/cuda/bin/ptxas
+      # GPT-OSS tiktoken vocab cache (offline)
+      - TIKTOKEN_RS_CACHE_DIR=/tiktoken_cache
+      # Enable MXFP4 for Blackwell GPUs
+      - VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8=1
+    command: >
+      --model openai/gpt-oss-120b
+      --tensor-parallel-size 1
+      --gpu-memory-utilization 0.90
+      --max-model-len 32768
+      --async-scheduling
+      --no-enable-prefix-caching
+      --kv-cache-dtype fp8
+      --tool-call-parser openai
+      --enable-auto-tool-choice
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
+
+  # ===========================================
+  # Nginx Proxy for vLLM API (port 83/446)
+  # ===========================================
+  nginx-vllm:
+    build:
+      context: ./nginx-vllm
+      dockerfile: Dockerfile
+    container_name: nginx-vllm
+    restart: unless-stopped
+    ports:
+      - "83:80"
+      - "446:443"
+    volumes:
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - ./nginx-vllm/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - vllm
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ===========================================
+  # Open WebUI - LLM Chat Interface (vLLM)
+  # ===========================================
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - OPENAI_API_BASE_URL=http://vllm:8000/v1
+      - OPENAI_API_KEY=not-needed
+    volumes:
+      - ./open-webui/data:/app/backend/data
+    depends_on:
+      - vllm
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ===========================================
+  # Nginx Proxy for Open WebUI (port 81/444)
+  # ===========================================
+  nginx-webui:
+    build:
+      context: ./nginx-webui
+      dockerfile: Dockerfile
+    container_name: nginx-webui
+    restart: unless-stopped
+    ports:
+      - "81:80"
+      - "444:443"
+    volumes:
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - ./nginx-webui/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - open-webui
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ===========================================
+  # ComfyUI - Stable Diffusion Web Interface
+  # ===========================================
+  comfyui:
+    build:
+      context: ./comfyui
+      dockerfile: Dockerfile
+    container_name: comfyui
+    restart: unless-stopped
+    expose:
+      - "8188"
+    volumes:
+      - ./comfyui/models:/app/ComfyUI/models
+      - ./comfyui/output:/app/ComfyUI/output
+      - ./comfyui/input:/app/ComfyUI/input
+      - ./comfyui/custom_nodes:/app/ComfyUI/custom_nodes
+      - ./comfyui/user:/app/ComfyUI/user
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8188/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ===========================================
+  # Nginx Proxy for ComfyUI (port 82/445)
+  # ===========================================
+  nginx-comfyui:
+    build:
+      context: ./nginx-comfyui
+      dockerfile: Dockerfile
+    container_name: nginx-comfyui
+    restart: unless-stopped
+    ports:
+      - "82:80"
+      - "445:443"
+    volumes:
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - ./nginx-comfyui/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - comfyui
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ===========================================
+  # Mini-SWE-Agent - AI Software Engineering Agent
+  # ===========================================
+  mini-swe-agent:
+    build:
+      context: ../mini-swe-agent
+      dockerfile: ../ai/mini-swe-agent/Dockerfile
+    container_name: mini-swe-agent
+    restart: "no"
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./mini-swe-agent/workspace:/workspace
+      - ./mini-swe-agent/config:/config:ro
+    environment:
+      - OPENAI_API_BASE=http://vllm:8000/v1
+      - OPENAI_API_KEY=not-needed
+      - MSWEA_COST_TRACKING=ignore_errors
+      - MSWEA_CONFIG_DIR=/config
+    depends_on:
+      - vllm
+    networks:
+      - ai-network
+
+  # ===========================================
+  # SWE-bench Runner - Benchmark with vLLM + CodeFS
+  # ===========================================
+  # This container runs the SWE-bench benchmark, spawning Docker containers
+  # for each SWE-bench instance while using vLLM (GPT-OSS) for LLM inference.
+  #
+  # Usage:
+  #   # Run SWE-bench lite with gpt-oss-120b via vLLM
+  #   docker compose run --rm swebench-runner swebench \
+  #     --config swebench_vllm_codefs \
+  #     -m openai/gpt-oss-120b \
+  #     --subset lite \
+  #     --slice 0:5 \
+  #     -o /results
+  #
+  #   # Run single instance for debugging
+  #   docker compose run --rm swebench-runner swebench-single \
+  #     --config swebench_vllm_codefs \
+  #     -m openai/gpt-oss-120b \
+  #     --subset lite \
+  #     --instance sympy__sympy-15599
+  #
+  swebench-runner:
+    build:
+      context: .
+      dockerfile: ./mini-swe-agent/Dockerfile.swebench
+      additional_contexts:
+        mini-swe-agent: ../mini-swe-agent
+        codefs: ../codefs
+    container_name: swebench-runner
+    restart: "no"
+    stdin_open: true
+    tty: true
+    privileged: true
+    volumes:
+      # Docker socket to spawn SWE-bench containers
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Results output
+      - ./mini-swe-agent/results:/results
+      # Workspace for temporary files
+      - ./mini-swe-agent/workspace:/workspace
+      # FUSE device for codefs
+      - /dev/fuse:/dev/fuse
+    environment:
+      - OPENAI_API_BASE=http://vllm:8000/v1
+      - OPENAI_API_KEY=not-needed
+      - MSWEA_COST_TRACKING=ignore_errors
+      # Allow FUSE in container
+      - FUSE_ALLOW_OTHER=1
+    depends_on:
+      - vllm
+    networks:
+      - ai-network
+    # Required for FUSE filesystem
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - apparmor:unconfined
+
+networks:
+  ai-network:
+    driver: bridge
+    name: ai-network
+
+volumes: {}
