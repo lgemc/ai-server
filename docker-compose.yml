@@ -26,13 +26,14 @@ services:
     command: >
       --model openai/gpt-oss-120b
       --tensor-parallel-size 1
-      --gpu-memory-utilization 0.90
-      --max-model-len 32768
+      --gpu-memory-utilization 0.70
+      --max-model-len 41440
       --async-scheduling
       --no-enable-prefix-caching
       --kv-cache-dtype fp8
       --tool-call-parser openai
       --enable-auto-tool-choice
+      --enable-chunked-prefill
     ipc: host
     deploy:
       resources:
@@ -49,6 +50,66 @@ services:
       timeout: 10s
       retries: 3
       start_period: 300s
+
+  # ===========================================
+  # Ollama - Local LLM Server (Blackwell)
+  # ===========================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./ollama/models:/root/.ollama
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      # Blackwell GPU optimization
+      - OLLAMA_NUM_PARALLEL=4
+      - OLLAMA_MAX_LOADED_MODELS=1
+      - OLLAMA_FLASH_ATTENTION=1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ===========================================
+  # Nginx Proxy for Ollama API (port 84/447)
+  # ===========================================
+  nginx-ollama:
+    build:
+      context: ./nginx-ollama
+      dockerfile: Dockerfile
+    container_name: nginx-ollama
+    restart: unless-stopped
+    ports:
+      - "84:80"
+      - "447:443"
+    volumes:
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - ./nginx-ollama/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - ollama
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   # ===========================================
   # Nginx Proxy for vLLM API (port 83/446)
@@ -86,12 +147,16 @@ services:
     ports:
       - "8080:8080"
     environment:
+      # Ollama backend
+      - OLLAMA_BASE_URL=http://ollama:11434
+      # OpenAI-compatible backend (vLLM)
       - OPENAI_API_BASE_URL=http://vllm:8000/v1
       - OPENAI_API_KEY=not-needed
     volumes:
       - ./open-webui/data:/app/backend/data
     depends_on:
-      - vllm
+#     - vllm
+      - ollama
     networks:
       - ai-network
     healthcheck:
@@ -164,6 +229,65 @@ services:
       start_period: 60s
 
   # ===========================================
+  # Whisper API - Speech-to-Text Server (Blackwell-optimized)
+  # ===========================================
+  whisper-api:
+    image: mekopa/whisperx-blackwell:latest
+    container_name: whisper-api
+    restart: unless-stopped
+    ipc: host
+    ports:
+      - "8001:8003"
+    environment:
+      # HuggingFace token for pyannote (speaker diarization) - optional
+      - HF_TOKEN=${HUGGING_FACE_HUB_TOKEN}
+      # Blackwell cuDNN compatibility fixes
+      - TORCH_ALLOW_TF32_CUBLAS_OVERRIDE=1
+      - TORCH_CUDNN_V8_API_ENABLED=1
+      - CUBLAS_WORKSPACE_CONFIG=:4096:8
+    volumes:
+      - whisper-cache:/root/.cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # ===========================================
+  # YouTube API - Video Download Server
+  # ===========================================
+  youtube-api:
+    build:
+      context: ./youtube-api
+      dockerfile: Dockerfile
+    container_name: youtube-api
+    restart: unless-stopped
+    ports:
+      - "8002:8000"
+    environment:
+      - DOWNLOAD_DIR=/tmp/youtube-downloads
+    volumes:
+      - youtube-downloads:/tmp/youtube-downloads
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ===========================================
   # Nginx Proxy for ComfyUI (port 82/445)
   # ===========================================
   nginx-comfyui:
@@ -192,26 +316,26 @@ services:
   # ===========================================
   # Mini-SWE-Agent - AI Software Engineering Agent
   # ===========================================
-  mini-swe-agent:
-    build:
-      context: ../mini-swe-agent
-      dockerfile: ../ai/mini-swe-agent/Dockerfile
-    container_name: mini-swe-agent
-    restart: "no"
-    stdin_open: true
-    tty: true
-    volumes:
-      - ./mini-swe-agent/workspace:/workspace
-      - ./mini-swe-agent/config:/config:ro
-    environment:
-      - OPENAI_API_BASE=http://vllm:8000/v1
-      - OPENAI_API_KEY=not-needed
-      - MSWEA_COST_TRACKING=ignore_errors
-      - MSWEA_CONFIG_DIR=/config
-    depends_on:
-      - vllm
-    networks:
-      - ai-network
+  # mini-swe-agent:
+  # build:
+  #    context: ../mini-swe-agent
+  #    dockerfile: ../ai/mini-swe-agent/Dockerfile
+  #  container_name: mini-swe-agent
+  #  restart: "no"
+  #  stdin_open: true
+  #  tty: true
+  #  volumes:
+  #    - ./mini-swe-agent/workspace:/workspace
+  #    - ./mini-swe-agent/config:/config:ro
+  #  environment:
+  #    - OPENAI_API_BASE=http://vllm:8000/v1
+  #    - OPENAI_API_KEY=not-needed
+  #    - MSWEA_COST_TRACKING=ignore_errors
+  #    - MSWEA_CONFIG_DIR=/config
+  #  depends_on:
+  #    - vllm
+  #  networks:
+  #    - ai-network
 
   # ===========================================
   # SWE-bench Runner - Benchmark with vLLM + CodeFS
@@ -235,46 +359,48 @@ services:
   #     --subset lite \
   #     --instance sympy__sympy-15599
   #
-  swebench-runner:
-    build:
-      context: .
-      dockerfile: ./mini-swe-agent/Dockerfile.swebench
-      additional_contexts:
-        mini-swe-agent: ../mini-swe-agent
-        codefs: ../codefs
-    container_name: swebench-runner
-    restart: "no"
-    stdin_open: true
-    tty: true
-    privileged: true
-    volumes:
-      # Docker socket to spawn SWE-bench containers
-      - /var/run/docker.sock:/var/run/docker.sock
-      # Results output
-      - ./mini-swe-agent/results:/results
-      # Workspace for temporary files
-      - ./mini-swe-agent/workspace:/workspace
-      # FUSE device for codefs
-      - /dev/fuse:/dev/fuse
-    environment:
-      - OPENAI_API_BASE=http://vllm:8000/v1
-      - OPENAI_API_KEY=not-needed
-      - MSWEA_COST_TRACKING=ignore_errors
-      # Allow FUSE in container
-      - FUSE_ALLOW_OTHER=1
-    depends_on:
-      - vllm
-    networks:
-      - ai-network
-    # Required for FUSE filesystem
-    cap_add:
-      - SYS_ADMIN
-    security_opt:
-      - apparmor:unconfined
+  #swebench-runner:
+  #  build:
+  #    context: .
+  #    dockerfile: ./mini-swe-agent/Dockerfile.swebench
+  #    additional_contexts:
+  #      mini-swe-agent: ../mini-swe-agent
+  #      codefs: ../codefs
+  #  container_name: swebench-runner
+  #  restart: "no"
+  #  stdin_open: true
+  #  tty: true
+  #  privileged: true
+  #  volumes:
+  #    # Docker socket to spawn SWE-bench containers
+  #    - /var/run/docker.sock:/var/run/docker.sock
+  #    # Results output
+  #    - ./mini-swe-agent/results:/results
+  #    # Workspace for temporary files
+  #    - ./mini-swe-agent/workspace:/workspace
+  #    # FUSE device for codefs
+  #    - /dev/fuse:/dev/fuse
+  #  environment:
+  #    - OPENAI_API_BASE=http://vllm:8000/v1
+  #    - OPENAI_API_KEY=not-needed
+  #    - MSWEA_COST_TRACKING=ignore_errors
+  #    # Allow FUSE in container
+  #    - FUSE_ALLOW_OTHER=1
+  #  depends_on:
+  #    - vllm
+  #  networks:
+  #    - ai-network
+  #  # Required for FUSE filesystem
+  #  cap_add:
+  #    - SYS_ADMIN
+  #  security_opt:
+  #    - apparmor:unconfined
 
 networks:
   ai-network:
     driver: bridge
     name: ai-network
 
-volumes: {}
+volumes:
+  whisper-cache:
+  youtube-downloads:

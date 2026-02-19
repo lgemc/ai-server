@@ -1,0 +1,23 @@
+services:
+  whisper-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    container_name: whisper-api
+    ports:
+      - "8001:8000"
+    environment:
+      - WHISPER_MODEL=large
+    volumes:
+      - whisper-cache:/root/.cache/whisper
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+volumes:
+  whisper-cache:
