@@ -229,6 +229,67 @@ services:
       start_period: 60s
 
   # ===========================================
+  # SD WebUI Forge - Stable Diffusion API (SDXL)
+  # ===========================================
+  sd-forge:
+    build:
+      context: ./sd-forge
+      dockerfile: Dockerfile
+    container_name: sd-forge
+    restart: unless-stopped
+    expose:
+      - "7860"
+    volumes:
+      - ./sd-forge/models:/app/stable-diffusion-webui-forge/models
+      - ./sd-forge/outputs:/app/stable-diffusion-webui-forge/outputs
+      - ./sd-forge/extensions:/app/stable-diffusion-webui-forge/extensions
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - TORCH_ALLOW_TF32_CUBLAS_OVERRIDE=1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/sdapi/v1/sd-models"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # ===========================================
+  # Nginx Proxy for SD Forge (port 85/448)
+  # ===========================================
+  nginx-sd:
+    build:
+      context: ./nginx-sd
+      dockerfile: Dockerfile
+    container_name: nginx-sd
+    restart: unless-stopped
+    ports:
+      - "85:80"
+      - "448:443"
+    volumes:
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - ./nginx-sd/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - sd-forge
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ===========================================
   # Whisper API - Speech-to-Text Server (Blackwell-optimized)
   # ===========================================
   whisper-api:
