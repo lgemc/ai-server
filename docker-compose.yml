@@ -26,7 +26,7 @@ services:
     command: >
       --model openai/gpt-oss-120b
       --tensor-parallel-size 1
-      --gpu-memory-utilization 0.70
+      --gpu-memory-utilization 0.50
       --max-model-len 41440
       --async-scheduling
       --no-enable-prefix-caching
@@ -349,6 +349,50 @@ services:
       start_period: 10s
 
   # ===========================================
+  # Chatterbox TTS API - Text-to-Speech (Blackwell)
+  # ===========================================
+  # OpenAI-compatible TTS: POST /v1/audio/speech
+  # Setup: cd tts-api && ./setup.sh (clones the repo first)
+  tts-api:
+    build:
+      context: ./tts-api
+      dockerfile: Dockerfile
+    container_name: tts-api
+    restart: unless-stopped
+    ports:
+      - "8003:4123"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - DEVICE=cuda
+      # Blackwell (sm_120) JIT compilation fix
+      - TORCH_CUDA_ARCH_LIST=12.0
+      - TRITON_PTXAS_PATH=/usr/local/cuda/bin/ptxas
+      - EXAGGERATION=0.4
+      - CFG_WEIGHT=2.5
+      - TEMPERATURE=0.6
+      - MAX_CHUNK_LENGTH=280
+      - MAX_TOTAL_LENGTH=3000
+    volumes:
+      - tts-models:/cache
+      - tts-voices:/voices
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4123/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
+
+  # ===========================================
   # Nginx Proxy for ComfyUI (port 82/445)
   # ===========================================
   nginx-comfyui:
@@ -465,3 +509,5 @@ networks:
 volumes:
   whisper-cache:
   youtube-downloads:
+  tts-models:
+  tts-voices:
