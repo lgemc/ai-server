@@ -6,7 +6,7 @@ services:
   # ===========================================
   vllm:
     image: scitrera/dgx-spark-vllm:0.17.0-t5
-    entrypoint: ["vllm", "serve"]
+    entrypoint: ["/workspace/entrypoint.sh"]
     container_name: vllm
     restart: unless-stopped
     ports:
@@ -14,6 +14,7 @@ services:
     volumes:
       - ./vllm/models:/root/.cache/huggingface
       - ./vllm/tiktoken_cache:/tiktoken_cache
+      - ./vllm/entrypoint.sh:/workspace/entrypoint.sh:ro
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
@@ -21,6 +22,8 @@ services:
       - HF_HOME=/root/.cache/huggingface
       - VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8=1
       - VLLM_MXFP4_BACKEND=marlin
+      - VLLM_MARLIN_USE_ATOMIC_ADD=1
+      - VLLM_GPT_OSS_HARMONY_SYSTEM_INSTRUCTIONS=1
       - VLLM_USE_V1=1
       - VLLM_PLATFORM=cuda
       - TIKTOKEN_RS_CACHE_DIR=/tiktoken_cache
@@ -29,8 +32,9 @@ services:
     command: >
       openai/gpt-oss-120b
       --tensor-parallel-size 1
-      --gpu-memory-utilization 0.85
-      --max-model-len 32768
+      --gpu-memory-utilization 0.90
+      --max-model-len 131072
+      --attention-backend FLASHINFER
       --tool-call-parser hermes
       --enable-auto-tool-choice
     ipc: host
@@ -49,6 +53,115 @@ services:
       timeout: 10s
       retries: 3
       start_period: 300s
+
+  # ===========================================
+  # vLLM-MXFP4 - GPT-OSS 120B (christopherowen fork, CUTLASS native MXFP4)
+  # ===========================================
+  # Cannot run alongside vllm (1 GPU). Start with: docker compose up vllm-mxfp4
+  vllm-mxfp4:
+    image: localhost/vllm-node-mxfp4:latest
+    container_name: vllm-mxfp4
+    restart: "no"
+    ports:
+      - "8006:8000"
+    volumes:
+      - ./vllm/models:/root/.cache/huggingface
+      - ./vllm/torch_compile_cache:/root/.cache/vllm/torch_compile_cache
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}
+      - HF_HOME=/root/.cache/huggingface
+      - VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8=1
+      - VLLM_GPT_OSS_HARMONY_SYSTEM_INSTRUCTIONS=1
+      - PYTHONUNBUFFERED=1
+    command: >
+      vllm serve openai/gpt-oss-120b
+      --host 0.0.0.0
+      --port 8000
+      --tensor-parallel-size 1
+      --gpu-memory-utilization 0.80
+      --max-num-batched-tokens 8192
+      --quantization mxfp4
+      --mxfp4-backend CUTLASS
+      --mxfp4-layers moe,qkv,o,lm_head
+      --attention-backend FLASHINFER
+      --kv-cache-dtype fp8
+      --load-format fastsafetensors
+      --enable-prefix-caching
+      --tool-call-parser openai
+      --reasoning-parser openai_gptoss
+      --enable-auto-tool-choice
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
+
+  # ===========================================
+  # Nemotron-3-Super-120B - NVFP4 (Latent MoE + Mamba-2 hybrid)
+  # ===========================================
+  # Cannot run alongside vllm or vllm-mxfp4 (1 GPU).
+  # Download model first: huggingface-cli download nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4
+  # Start with: docker compose up nemotron
+  nemotron:
+    image: nvcr.io/nvidia/vllm:26.04-py3
+    container_name: nemotron
+    restart: "no"
+    ports:
+      - "8007:8000"
+    volumes:
+      - ./vllm/models:/root/.cache/huggingface
+      - ./vllm/torch_compile_cache_nemotron:/root/.cache/vllm/torch_compile_cache
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}
+      - HF_HOME=/root/.cache/huggingface
+      - VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
+      - PYTHONUNBUFFERED=1
+    command: >
+      vllm serve nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4
+      --host 0.0.0.0
+      --port 8000
+      --tensor-parallel-size 1
+      --gpu-memory-utilization 0.70
+      --max-model-len 131072
+      --max-num-seqs 4
+      --kv-cache-dtype fp8
+      --attention-backend FLASHINFER
+      --trust-remote-code
+      --reasoning-parser nemotron_v3
+      --tool-call-parser qwen3_coder
+      --enable-auto-tool-choice
+      --enable-prefix-caching
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 600s
 
   # ===========================================
   # TensorRT-LLM - GPT-OSS 120B + Eagle3 speculative decoding
@@ -255,16 +368,11 @@ services:
     ports:
       - "8080:8080"
     environment:
-      # Ollama backend
-      - OLLAMA_BASE_URL=http://ollama:11434
-      # OpenAI-compatible backend (vLLM)
-      - OPENAI_API_BASE_URL=http://vllm:8000/v1
-      - OPENAI_API_KEY=not-needed
+      # OpenAI-compatible backends (vLLM + vLLM-MXFP4), semicolon-separated
+      - OPENAI_API_BASE_URLS=http://vllm:8000/v1;http://vllm-mxfp4:8000/v1;http://nemotron:8000/v1
+      - OPENAI_API_KEYS=not-needed;not-needed;not-needed
     volumes:
       - ./open-webui/data:/app/backend/data:Z
-    depends_on:
-#     - vllm
-      - ollama
     networks:
       - ai-network
     healthcheck:
