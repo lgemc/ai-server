@@ -116,7 +116,7 @@ services:
   # Download model first: huggingface-cli download nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4
   # Start with: docker compose up nemotron
   nemotron:
-    image: nvcr.io/nvidia/vllm:26.04-py3
+    image: nvcr.io/nvidia/vllm:26.05-py3
     container_name: nemotron
     restart: "no"
     ports:
@@ -136,16 +136,17 @@ services:
       --host 0.0.0.0
       --port 8000
       --tensor-parallel-size 1
-      --gpu-memory-utilization 0.70
+      --gpu-memory-utilization 0.80
       --max-model-len 131072
-      --max-num-seqs 4
+      --max-num-seqs 8
       --kv-cache-dtype fp8
       --attention-backend FLASHINFER
+      --enable-chunked-prefill
+      --speculative_config '{"method":"mtp","num_speculative_tokens":2}'
       --trust-remote-code
       --reasoning-parser nemotron_v3
       --tool-call-parser qwen3_coder
       --enable-auto-tool-choice
-      --enable-prefix-caching
     ipc: host
     deploy:
       resources:
