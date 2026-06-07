@@ -5,35 +5,34 @@ services:
   # vLLM - GPT-OSS Server (Blackwell with MXFP4)
   # ===========================================
   vllm:
-    image: vllm/vllm-openai:v0.12.0
+    image: scitrera/dgx-spark-vllm:0.17.0-t5
+    entrypoint: ["vllm", "serve"]
     container_name: vllm
     restart: unless-stopped
     ports:
       - "8000:8000"
     volumes:
       - ./vllm/models:/root/.cache/huggingface
-      - ./vllm/tiktoken_cache:/tiktoken_cache:ro
+      - ./vllm/tiktoken_cache:/tiktoken_cache
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
       - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}
-      # Fix for Blackwell (sm_121a) - use system ptxas instead of Triton's bundled one
-      - TRITON_PTXAS_PATH=/usr/local/cuda/bin/ptxas
-      # GPT-OSS tiktoken vocab cache (offline)
-      - TIKTOKEN_RS_CACHE_DIR=/tiktoken_cache
-      # Enable MXFP4 for Blackwell GPUs
+      - HF_HOME=/root/.cache/huggingface
       - VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8=1
+      - VLLM_MXFP4_BACKEND=marlin
+      - VLLM_USE_V1=1
+      - VLLM_PLATFORM=cuda
+      - TIKTOKEN_RS_CACHE_DIR=/tiktoken_cache
+      - TIKTOKEN_ENCODINGS_BASE=/tiktoken_cache
+      - PYTHONUNBUFFERED=1
     command: >
-      --model openai/gpt-oss-120b
+      openai/gpt-oss-120b
       --tensor-parallel-size 1
-      --gpu-memory-utilization 0.50
-      --max-model-len 41440
-      --async-scheduling
-      --no-enable-prefix-caching
-      --kv-cache-dtype fp8
-      --tool-call-parser openai
+      --gpu-memory-utilization 0.85
+      --max-model-len 32768
+      --tool-call-parser hermes
       --enable-auto-tool-choice
-      --enable-chunked-prefill
     ipc: host
     deploy:
       resources:
@@ -50,6 +49,114 @@ services:
       timeout: 10s
       retries: 3
       start_period: 300s
+
+  # ===========================================
+  # TensorRT-LLM - GPT-OSS 120B + Eagle3 speculative decoding
+  # ===========================================
+  # Requires: openai/gpt-oss-120b + nvidia/gpt-oss-120b-Eagle3-long-context
+  # GB10 has 128GB unified memory; tp_size=1 (single chip).
+  # Cannot run alongside vllm (1 GPU). Start with: docker compose up trtllm-120b
+  # NGC image: check https://catalog.ngc.nvidia.com for latest aarch64 tag.
+  trtllm-120b:
+    image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc17
+    entrypoint: ["trtllm-serve"]
+    container_name: trtllm-120b
+    restart: "no"
+    ports:
+      - "8004:8000"
+    volumes:
+      - ./vllm/models:/root/.cache/huggingface
+      - ./vllm/tiktoken_cache:/tiktoken_cache
+      - ./trtllm/extra-llm-api-config.yml:/workspace/extra-llm-api-config.yml:ro
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}
+      - PYTHONUNBUFFERED=1
+      - LD_LIBRARY_PATH=/usr/local/tensorrt/lib:/usr/local/cuda/lib64
+      - PYTORCH_ALLOC_CONF=expandable_segments:True
+      - TIKTOKEN_RS_CACHE_DIR=/tiktoken_cache
+      - TIKTOKEN_ENCODINGS_BASE=/tiktoken_cache
+    command: >
+      serve openai/gpt-oss-120b
+      --host 0.0.0.0
+      --port 8000
+      --backend pytorch
+      --max_batch_size 8
+      --max_num_tokens 4096
+      --max_seq_len 32768
+      --tp_size 1
+      --extra_llm_api_options /workspace/extra-llm-api-config.yml
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 600s
+
+  # ===========================================
+  # TensorRT-LLM - GPT-OSS 120B + Eagle3 LONG-context speculative decoding (alt config)
+  # ===========================================
+  # Requires: openai/gpt-oss-120b + nvidia/gpt-oss-120b-Eagle3-long-context
+  # GB10 has 128GB unified memory; tp_size=1 (single chip).
+  # Cannot run alongside vllm or trtllm-120b (1 GPU). Start with:
+  #   docker compose up trtllm-120b-short
+  trtllm-120b-short:
+    image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc17
+    entrypoint: ["trtllm-serve"]
+    container_name: trtllm-120b-short
+    restart: "no"
+    ports:
+      - "8005:8000"
+    volumes:
+      - ./vllm/models:/root/.cache/huggingface
+      - ./vllm/tiktoken_cache:/tiktoken_cache
+      - ./trtllm/extra-llm-api-config-short.yml:/workspace/extra-llm-api-config.yml:ro
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}
+      - PYTHONUNBUFFERED=1
+      - LD_LIBRARY_PATH=/usr/local/tensorrt/lib:/usr/local/cuda/lib64
+      - PYTORCH_ALLOC_CONF=expandable_segments:True
+      - TIKTOKEN_RS_CACHE_DIR=/tiktoken_cache
+      - TIKTOKEN_ENCODINGS_BASE=/tiktoken_cache
+    command: >
+      serve openai/gpt-oss-120b
+      --host 0.0.0.0
+      --port 8000
+      --backend pytorch
+      --max_batch_size 8
+      --max_num_tokens 4096
+      --max_seq_len 32768
+      --tp_size 1
+      --extra_llm_api_options /workspace/extra-llm-api-config.yml
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 600s
 
   # ===========================================
   # Ollama - Local LLM Server (Blackwell)
@@ -69,6 +176,7 @@ services:
       - OLLAMA_NUM_PARALLEL=4
       - OLLAMA_MAX_LOADED_MODELS=1
       - OLLAMA_FLASH_ATTENTION=1
+      - OLLAMA_KEEP_ALIVE=0
     deploy:
       resources:
         reservations:
@@ -153,7 +261,7 @@ services:
       - OPENAI_API_BASE_URL=http://vllm:8000/v1
       - OPENAI_API_KEY=not-needed
     volumes:
-      - ./open-webui/data:/app/backend/data
+      - ./open-webui/data:/app/backend/data:Z
     depends_on:
 #     - vllm
       - ollama
@@ -171,16 +279,13 @@ services:
   # ===========================================
   nginx-webui:
     build:
-      context: ./nginx-webui
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: nginx-webui/Dockerfile
     container_name: nginx-webui
     restart: unless-stopped
     ports:
-      - "81:80"
-      - "444:443"
-    volumes:
-      - ./nginx/certs:/etc/nginx/certs:ro
-      - ./nginx-webui/nginx.conf:/etc/nginx/nginx.conf:ro
+      - "8100:80"
+      - "4430:443"
     depends_on:
       - open-webui
     networks:
