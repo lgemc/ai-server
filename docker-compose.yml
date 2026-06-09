@@ -142,11 +142,182 @@ services:
       --kv-cache-dtype fp8
       --attention-backend FLASHINFER
       --enable-chunked-prefill
-      --speculative_config '{"method":"mtp","num_speculative_tokens":2}'
+      --speculative_config '{"method":"mtp","num_speculative_tokens":3}'
       --trust-remote-code
       --reasoning-parser nemotron_v3
       --tool-call-parser qwen3_coder
       --enable-auto-tool-choice
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 600s
+
+  # ===========================================
+  # Qwen3.5-122B-A10B - NVFP4 (MoE + MTP speculative decoding)
+  # ===========================================
+  # Cannot run alongside vllm, vllm-mxfp4, or nemotron (1 GPU).
+  # Download model first: huggingface-cli download txn545/Qwen3.5-122B-A10B-NVFP4
+  # Start with: docker compose up qwen35
+  qwen35:
+    image: nvcr.io/nvidia/vllm:26.05-py3
+    container_name: qwen35
+    restart: "no"
+    ports:
+      - "8008:8000"
+    volumes:
+      - ./vllm/models:/root/.cache/huggingface
+      - ./vllm/torch_compile_cache_qwen35:/root/.cache/vllm/torch_compile_cache
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}
+      - HF_HOME=/root/.cache/huggingface
+      - VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
+      - PYTHONUNBUFFERED=1
+    command: >
+      vllm serve txn545/Qwen3.5-122B-A10B-NVFP4
+      --host 0.0.0.0
+      --port 8000
+      --tensor-parallel-size 1
+      --gpu-memory-utilization 0.90
+      --max-model-len 131072
+      --max-num-seqs 16
+      --max-num-batched-tokens 8192
+      --quantization modelopt
+      --kv-cache-dtype fp8
+      --attention-backend FLASHINFER
+      --enable-chunked-prefill
+      --enable-prefix-caching
+      --speculative-config '{"method":"mtp","num_speculative_tokens":3}'
+      --trust-remote-code
+      --reasoning-parser qwen3
+      --tool-call-parser qwen3_coder
+      --enable-auto-tool-choice
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 600s
+
+  # ===========================================
+  # Qwen3.6-35B-A3B - NVFP4 (MoE + MTP speculative decoding)
+  # ===========================================
+  # Cannot run alongside vllm, vllm-mxfp4, nemotron, qwen35, or qwen35-autoround (1 GPU).
+  # Download model first: huggingface-cli download nvidia/Qwen3.6-35B-A3B-NVFP4
+  # Start with: docker compose up qwen36-35b
+  qwen36-35b:
+    image: vllm/vllm-openai:cu130-nightly
+    container_name: qwen36-35b
+    restart: "no"
+    ports:
+      - "8010:8000"
+    volumes:
+      - ./vllm/models:/root/.cache/huggingface
+      - ./vllm/torch_compile_cache_qwen36_35b:/root/.cache/vllm/torch_compile_cache
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}
+      - HF_HOME=/root/.cache/huggingface
+      - VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
+      - PYTHONUNBUFFERED=1
+    command: >
+      --model RedHatAI/Qwen3.6-35B-A3B-NVFP4
+      --host 0.0.0.0
+      --port 8000
+      --tensor-parallel-size 1
+      --gpu-memory-utilization 0.90
+      --max-model-len 131072
+      --max-num-seqs 32
+      --max-num-batched-tokens 8192
+      --quantization compressed-tensors
+      --kv-cache-dtype fp8
+      --moe-backend flashinfer_cutlass
+      --attention-backend FLASHINFER
+      --enable-chunked-prefill
+      --enable-prefix-caching
+      --speculative-config '{"method":"mtp","num_speculative_tokens":3}'
+      --trust-remote-code
+      --reasoning-parser qwen3
+      --tool-call-parser qwen3_coder
+      --enable-auto-tool-choice
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 600s
+
+  # ===========================================
+  # Qwen3.5-122B-A10B - INT4-AutoRound (Intel AutoRound quantization)
+  # ===========================================
+  # Cannot run alongside vllm, vllm-mxfp4, nemotron, or qwen35 (1 GPU).
+  # Download model first: huggingface-cli download Intel/Qwen3.5-122B-A10B-int4-AutoRound
+  # Start with: docker compose up qwen35-autoround
+  qwen35-autoround:
+    image: ghcr.io/spark-arena/dgx-vllm-eugr-nightly-tf5:2026032702
+    container_name: qwen35-autoround
+    restart: "no"
+    ports:
+      - "8009:8000"
+    volumes:
+      - ./vllm/models:/root/.cache/huggingface
+      - ./vllm/torch_compile_cache_qwen35_autoround:/root/.cache/vllm/torch_compile_cache
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}
+      - HF_HOME=/root/.cache/huggingface
+      - VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
+      - VLLM_MARLIN_USE_ATOMIC_ADD=1
+      - PYTHONUNBUFFERED=1
+    command: >
+      vllm serve Intel/Qwen3.5-122B-A10B-int4-AutoRound
+      --host 0.0.0.0
+      --port 8000
+      --tensor-parallel-size 1
+      --gpu-memory-utilization 0.70
+      --max-model-len 262144
+      --max-num-batched-tokens 8192
+      --load-format fastsafetensors
+      --enable-prefix-caching
+      --enable-auto-tool-choice
+      --tool-call-parser qwen3_coder
+      --reasoning-parser qwen3
+      --trust-remote-code
     ipc: host
     deploy:
       resources:
@@ -370,8 +541,8 @@ services:
       - "8080:8080"
     environment:
       # OpenAI-compatible backends (vLLM + vLLM-MXFP4), semicolon-separated
-      - OPENAI_API_BASE_URLS=http://vllm:8000/v1;http://vllm-mxfp4:8000/v1;http://nemotron:8000/v1
-      - OPENAI_API_KEYS=not-needed;not-needed;not-needed
+      - OPENAI_API_BASE_URLS=http://vllm:8000/v1;http://vllm-mxfp4:8000/v1;http://nemotron:8000/v1;http://qwen35:8000/v1;http://qwen35-autoround:8000/v1;http://qwen36-35b:8000/v1
+      - OPENAI_API_KEYS=not-needed;not-needed;not-needed;not-needed;not-needed;not-needed
     volumes:
       - ./open-webui/data:/app/backend/data:Z
     networks:
@@ -395,8 +566,6 @@ services:
     ports:
       - "8100:80"
       - "4430:443"
-    depends_on:
-      - open-webui
     networks:
       - ai-network
     healthcheck:
