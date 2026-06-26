@@ -3,8 +3,6 @@ from .youtube import YouTubeAdapter
 from .tts import TTSAdapter
 from .comfyui import ComfyUIAdapter
 from .sd_forge import SDForgeAdapter
-from .ollama import OllamaAdapter
-from .vllm import vLLMAdapter
 
 __all__ = [
     "WhisperAdapter",
@@ -12,6 +10,4 @@ __all__ = [
     "TTSAdapter",
     "ComfyUIAdapter",
     "SDForgeAdapter",
-    "OllamaAdapter",
-    "vLLMAdapter",
 ]

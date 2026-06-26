@@ -32,7 +32,7 @@ class WhisperAdapter(WhisperPort):
         if request and request.language:
             data["language"] = request.language
 
-        resp = httpx.post(f"{self.base_url}/whisper/transcribe", files=files, data=data)
+        resp = httpx.post(f"{self.base_url}/transcribe", files=files, data=data)
         resp.raise_for_status()
         return TranscribeResponse(**resp.json())
 
@@ -42,12 +42,12 @@ class WhisperAdapter(WhisperPort):
         request: TranscribeRequest = None,
     ) -> TranscribeResponse:
         """Async transcription."""
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=600.0) as client:
             files = {"file": ("audio.wav", audio_file, "audio/wav")}
             data = {}
             if request and request.language:
                 data["language"] = request.language
 
-            resp = await client.post(f"{self.base_url}/whisper/transcribe", files=files, data=data)
+            resp = await client.post(f"{self.base_url}/transcribe", files=files, data=data)
             resp.raise_for_status()
             return TranscribeResponse(**resp.json())

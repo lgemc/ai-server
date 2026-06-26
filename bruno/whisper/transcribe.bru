@@ -5,14 +5,12 @@ meta {
 }
 
 post {
-  url: {{whisper_url}}/v1/audio/transcriptions
+  url: {{whisper_url}}/transcribe
   body: multipartForm
   auth: none
 }
 
 body:multipart-form {
   file: @file(/path/to/audio.mp3)
-  model: whisper-1
   language: en
-  response_format: json
 }

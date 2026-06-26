@@ -6,9 +6,9 @@ from enum import Enum
 class WordTiming(BaseModel):
     """Timing information for a single word."""
     word: str
-    start: float
-    end: float
-    score: float
+    start: Optional[float] = None
+    end: Optional[float] = None
+    score: Optional[float] = None
     speaker: Optional[str] = None
 
 
@@ -38,14 +38,17 @@ class TranscribeRequest(BaseModel):
 class DownloadResponse(BaseModel):
     """Response from YouTube download service."""
     status: str
-    url: Optional[str] = None
+    url: Optional[str] = None        # full URL to fetch the file
+    download_id: Optional[str] = None
+    filename: Optional[str] = None
+    title: Optional[str] = None
     message: Optional[str] = None
 
 
 class DownloadRequest(BaseModel):
     """Request to download a YouTube video."""
     url: str
-    format: str = "mp4"
+    format: str = "mp4"  # "mp3" triggers audio_only=True
 
 
 # ─── TTS Models ───────────────────────────────────────────────────────────────

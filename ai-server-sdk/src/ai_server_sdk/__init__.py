@@ -3,6 +3,7 @@
 # Ports (interfaces) are in ai_server_sdk.ports
 # Adapters (implementations) are in ai_server_sdk.adapters
 # User-facing clients are in ai_server_sdk.clients
+# Agent (ADK-backed) is in ai_server_sdk.agent
 
 from ai_server_sdk.core.models import (
     # Whisper
@@ -28,7 +29,7 @@ from ai_server_sdk.core.models import (
     SDTextToImageRequest,
     SDTextToImageResponse,
     SDImageToImageRequest,
-    # Ollama
+    # Ollama / shared chat models (kept for schema compatibility)
     OllamaMessage,
     OllamaMessageRole,
     OllamaChatResponse,
@@ -46,8 +47,6 @@ from ai_server_sdk.clients import (
     TTSClient,
     ComfyUIClient,
     SDForgeClient,
-    OllamaClient,
-    vLLMClient,
 )
 
 from ai_server_sdk.ports import (
@@ -56,8 +55,6 @@ from ai_server_sdk.ports import (
     TTSPort,
     ComfyUIPort,
     SDForgePort,
-    OllamaPort,
-    vLLMPort,
 )
 
 from ai_server_sdk.adapters import (
@@ -66,9 +63,9 @@ from ai_server_sdk.adapters import (
     TTSAdapter,
     ComfyUIAdapter,
     SDForgeAdapter,
-    OllamaAdapter,
-    vLLMAdapter,
 )
+
+from ai_server_sdk import agent  # noqa: F401
 
 __all__ = [
     # Models
@@ -104,22 +101,18 @@ __all__ = [
     "TTSClient",
     "ComfyUIClient",
     "SDForgeClient",
-    "OllamaClient",
-    "vLLMClient",
     # Ports
     "WhisperPort",
     "YouTubePort",
     "TTSPort",
     "ComfyUIPort",
     "SDForgePort",
-    "OllamaPort",
-    "vLLMPort",
     # Adapters
     "WhisperAdapter",
     "YouTubeAdapter",
     "TTSAdapter",
     "ComfyUIAdapter",
     "SDForgeAdapter",
-    "OllamaAdapter",
-    "vLLMAdapter",
+    # Agent
+    "agent",
 ]
