@@ -1,0 +1,28 @@
+meta {
+  name: Text to Image
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{sd_forge_url}}/sdapi/v1/txt2img
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "prompt": "a beautiful sunset over the ocean, photorealistic, 8k",
+    "negative_prompt": "ugly, blurry, low quality, watermark",
+    "steps": 20,
+    "cfg_scale": 7,
+    "width": 1024,
+    "height": 1024,
+    "sampler_name": "Euler a",
+    "seed": -1
+  }
+}

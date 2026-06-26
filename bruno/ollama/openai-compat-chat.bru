@@ -1,0 +1,28 @@
+meta {
+  name: Chat (OpenAI-compat)
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{ollama_url}}/v1/chat/completions
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "model": "llama3.2",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hello!"
+      }
+    ],
+    "max_tokens": 256
+  }
+}

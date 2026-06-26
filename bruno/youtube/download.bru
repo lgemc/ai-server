@@ -1,0 +1,22 @@
+meta {
+  name: Download Video
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{youtube_url}}/download
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    "format": "mp4"
+  }
+}

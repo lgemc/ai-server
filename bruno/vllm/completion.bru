@@ -1,0 +1,24 @@
+meta {
+  name: Text Completion
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{vllm_url}}/v1/completions
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "model": "openai/gpt-oss-120b",
+    "prompt": "The capital of France is",
+    "max_tokens": 64,
+    "temperature": 0
+  }
+}

@@ -1,0 +1,18 @@
+meta {
+  name: Transcribe Audio
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{whisper_url}}/v1/audio/transcriptions
+  body: multipartForm
+  auth: none
+}
+
+body:multipart-form {
+  file: @file(/path/to/audio.mp3)
+  model: whisper-1
+  language: en
+  response_format: json
+}

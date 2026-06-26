@@ -1,0 +1,28 @@
+meta {
+  name: Chat
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{ollama_url}}/api/chat
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "model": "llama3.2",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Why is the sky blue?"
+      }
+    ],
+    "stream": false
+  }
+}

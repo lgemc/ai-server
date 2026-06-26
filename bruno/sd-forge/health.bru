@@ -1,0 +1,11 @@
+meta {
+  name: Health Check (list models)
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{sd_forge_url}}/sdapi/v1/sd-models
+  body: none
+  auth: none
+}

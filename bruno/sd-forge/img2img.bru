@@ -1,0 +1,29 @@
+meta {
+  name: Image to Image
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{sd_forge_url}}/sdapi/v1/img2img
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "init_images": ["<base64-encoded-image>"],
+    "prompt": "same scene but at night, photorealistic",
+    "negative_prompt": "ugly, blurry",
+    "steps": 20,
+    "cfg_scale": 7,
+    "denoising_strength": 0.75,
+    "width": 1024,
+    "height": 1024,
+    "seed": -1
+  }
+}

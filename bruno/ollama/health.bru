@@ -1,0 +1,11 @@
+meta {
+  name: Health Check (tags)
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{ollama_url}}/api/tags
+  body: none
+  auth: none
+}
