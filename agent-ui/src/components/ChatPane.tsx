@@ -40,9 +40,14 @@ function parseContent(text: string): ContentPart[] {
 
 function MarkdownContent({ text, streaming }: { text: string; streaming?: boolean }) {
   const parts = parseContent(text)
+  // Reorder: text first, thinking last
+  const textParts = parts.filter(p => p.type === 'text')
+  const thinkParts = parts.filter(p => p.type === 'think')
+  const orderedParts = [...textParts, ...thinkParts]
+  
   return (
     <>
-      {parts.map((p, i) =>
+      {orderedParts.map((p, i) =>
         p.type === 'think' ? (
           <details key={i} style={thinkDetails} open={p.partial}>
             <summary style={thinkSummary}>
@@ -55,7 +60,7 @@ function MarkdownContent({ text, streaming }: { text: string; streaming?: boolea
         ) : (
           <div key={i} className="md-content">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{p.content}</ReactMarkdown>
-            {streaming && i === parts.length - 1 && (
+            {streaming && i === orderedParts.length - 1 && (
               <span style={{ display: 'inline-block', width: 8, height: 14, background: 'var(--accent)', borderRadius: 1, marginLeft: 2, animation: 'blink 1s step-end infinite', verticalAlign: 'text-bottom' }} />
             )}
           </div>
