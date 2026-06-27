@@ -127,11 +127,17 @@ export function ChatPane({ sessionId, messages, onMessagesUpdate, onArtifactsCha
         onArtifactsChange()
       }
     }, () => {
-      if (buffer.trim()) {
+      if (buffer.trim() || thinking.trim()) {
+        // Combine thinking and text into the final message
+        let combinedContent = buffer
+        if (thinking.trim()) {
+          const wrappedThinking = thinking.trim().startsWith('<think>') ? thinking.trim() : `<think>${thinking.trim()}</think>`
+          combinedContent = `${wrappedThinking}\n\n${buffer}`
+        }
         const assistantMsg: Message = {
           id: Date.now().toString() + '-a',
           role: 'assistant',
-          content: buffer,
+          content: combinedContent,
           timestamp: Date.now() / 1000,
         }
         onMessagesUpdate((prev: Message[]) => [...prev, assistantMsg])
@@ -197,18 +203,21 @@ export function ChatPane({ sessionId, messages, onMessagesUpdate, onArtifactsCha
             </div>
           )}
 
-          {(thinkBuffer || streamBuffer) && (
+          {streamBuffer && (
             <div style={assistantBubble}>
               <div style={bubbleLabel}>Assistant</div>
-              {thinkBuffer && (
-                <details style={thinkDetails} open>
-                  <summary style={thinkSummary}>💭 Thinking…</summary>
-                  <div style={thinkBody}>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{thinkBuffer}</ReactMarkdown>
-                  </div>
-                </details>
-              )}
-              {streamBuffer && <MarkdownContent text={streamBuffer} streaming />}
+              <MarkdownContent text={streamBuffer} streaming />
+            </div>
+          )}
+          {thinkBuffer && (
+            <div style={{ ...assistantBubble, opacity: 0.7 }}>
+              <div style={bubbleLabel}>Thinking</div>
+              <details style={thinkDetails} open={false}>
+                <summary style={thinkSummary}>💭 Thinking…</summary>
+                <div style={thinkBody}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{thinkBuffer}</ReactMarkdown>
+                </div>
+              </details>
             </div>
           )}
 
