@@ -209,17 +209,6 @@ export function ChatPane({ sessionId, messages, onMessagesUpdate, onArtifactsCha
               <MarkdownContent text={streamBuffer} streaming />
             </div>
           )}
-          {thinkBuffer && (
-            <div style={{ ...assistantBubble, opacity: 0.7 }}>
-              <div style={bubbleLabel}>Thinking</div>
-              <details style={thinkDetails} open={false}>
-                <summary style={thinkSummary}>💭 Thinking…</summary>
-                <div style={thinkBody}>
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{thinkBuffer}</ReactMarkdown>
-                </div>
-              </details>
-            </div>
-          )}
 
           <div ref={bottomRef} />
         </div>
