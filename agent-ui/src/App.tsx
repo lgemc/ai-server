@@ -9,6 +9,7 @@ export default function App() {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const loadSessions = useCallback(async () => {
     const s = await api.listSessions()
@@ -37,6 +38,7 @@ export default function App() {
     const s = await api.createSession()
     await loadSessions()
     loadSession(s.id)
+    setSidebarOpen(false)
   }
 
   const handleSelect = (id: string) => {
@@ -44,6 +46,7 @@ export default function App() {
     setMessages([])
     setArtifacts([])
     loadSession(id)
+    setSidebarOpen(false)
   }
 
   const handleDelete = async (id: string) => {
@@ -71,11 +74,13 @@ export default function App() {
   }, [loadSessions])
 
   const handleStreamDone = useCallback(() => {
-    if (activeId) loadSession(activeId)
-  }, [activeId, loadSession])
+    loadSessions()
+  }, [loadSessions])
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      <button className="menu-btn" onClick={() => setSidebarOpen(true)} aria-label="Open menu">☰</button>
+      <div className={`sidebar-backdrop${sidebarOpen ? ' open' : ''}`} onClick={() => setSidebarOpen(false)} />
       <Sidebar
         sessions={sessions}
         activeId={activeId}
@@ -83,6 +88,7 @@ export default function App() {
         onCreate={handleCreate}
         onDelete={handleDelete}
         onRename={handleRename}
+        isOpen={sidebarOpen}
       />
       <ChatPane
         sessionId={activeId}
@@ -90,6 +96,7 @@ export default function App() {
         onMessagesUpdate={handleMessagesUpdate}
         onArtifactsChange={refreshArtifacts}
         onStreamDone={handleStreamDone}
+        onCreate={handleCreate}
       />
       {activeId && <ArtifactPanel sessionId={activeId} artifacts={artifacts} />}
     </div>

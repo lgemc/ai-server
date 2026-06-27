@@ -76,9 +76,10 @@ interface Props {
   onMessagesUpdate: (next: Message[] | ((prev: Message[]) => Message[])) => void
   onArtifactsChange: () => void
   onStreamDone?: () => void
+  onCreate?: () => void
 }
 
-export function ChatPane({ sessionId, messages, onMessagesUpdate, onArtifactsChange, onStreamDone }: Props) {
+export function ChatPane({ sessionId, messages, onMessagesUpdate, onArtifactsChange, onStreamDone, onCreate }: Props) {
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
   const [agentState, setAgentState] = useState<string | null>(null)
@@ -163,8 +164,26 @@ export function ChatPane({ sessionId, messages, onMessagesUpdate, onArtifactsCha
 
   if (!sessionId) {
     return (
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text2)' }}>
-        Select or create a session to start chatting
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, padding: '0 24px', textAlign: 'center' }}>
+        <div style={{ fontSize: 32, marginBottom: 4 }}>🤖</div>
+        <div style={{ fontSize: 15, color: 'var(--text2)' }}>Select or create a session to start chatting</div>
+        <button
+          onClick={onCreate}
+          style={{
+            padding: '10px 24px',
+            background: 'var(--accent)',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 6,
+            cursor: 'pointer',
+            fontSize: 14,
+            fontWeight: 500,
+            maxWidth: 240,
+            width: '100%',
+          }}
+        >
+          + New chat
+        </button>
       </div>
     )
   }
@@ -184,6 +203,15 @@ export function ChatPane({ sessionId, messages, onMessagesUpdate, onArtifactsCha
           )}
 
           {messages.map(msg => <MessageBubble key={msg.id} msg={msg} />)}
+
+          {streaming && streamBuffer && (
+            <div style={{ ...messageRow, justifyContent: 'flex-start' }}>
+              <div style={assistantBubble}>
+                <div style={bubbleLabel}>Assistant</div>
+                <MarkdownContent text={streamBuffer} streaming />
+              </div>
+            </div>
+          )}
 
           {toolActivity && (
             <div style={toolBox}>
