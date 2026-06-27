@@ -26,6 +26,7 @@ export interface Artifact {
 }
 
 export type SSEEvent =
+  | { type: 'status'; state: string }
   | { type: 'text'; content: string; author: string }
   | { type: 'tool_call'; name: string; args: Record<string, unknown> }
   | { type: 'tool_result'; name: string; result: unknown }

@@ -26,6 +26,35 @@ def make_artifact_tools(artifacts_dir: str | Path = "", files_base_url: str = ""
     """Tools for the agent to inspect and read its own artifacts."""
     _base = Path(artifacts_dir) if artifacts_dir else None
 
+    def _find_in_fs(query: str) -> dict | None:
+        """Search all sessions on disk for best filename match, return a file entry dict."""
+        if _base is None:
+            return None
+        root = _base / app_name / user_id
+        if not root.exists():
+            return None
+        q = query.lower()
+        best = None
+        best_score = 0
+        for session_dir in root.iterdir():
+            if not session_dir.is_dir():
+                continue
+            for file_dir in session_dir.iterdir():
+                if not file_dir.is_dir():
+                    continue
+                filename = file_dir.name
+                score = sum(1 for w in q.split() if w in filename.lower())
+                if score > best_score:
+                    best_score = score
+                    versions = sorted(
+                        (v for v in file_dir.iterdir() if v.is_dir() and v.name.isdigit()),
+                        key=lambda v: int(v.name),
+                    )
+                    version = int(versions[-1].name) if versions else 0
+                    url = f"{files_base_url}/{app_name}/{user_id}/{session_dir.name}/{filename}/{version}/data" if files_base_url else ""
+                    best = {"filename": filename, "session_id": session_dir.name, "version": version, "url": url}
+        return best if best_score > 0 else None
+
     async def list_session_files(tool_context: ToolContext) -> dict:
         """List files saved in the CURRENT session only (not across all sessions).
 
@@ -86,32 +115,38 @@ def make_artifact_tools(artifacts_dir: str | Path = "", files_base_url: str = ""
         """
         files = tool_context.state.get("files", [])
         match = _fuzzy_match(query, files)
+
+        # If not found in session state, fall back to full filesystem search
+        if not match and _base is not None:
+            match = _find_in_fs(query)
+
         if not match:
             return {
-                "error": f"No artifact matching '{query}' found.",
+                "error": f"No artifact matching '{query}' found across any session.",
                 "candidates": [f["filename"] for f in files],
             }
 
         filename = match["filename"]
+        session_id = match.get("session_id", "")
+
+        # Try filesystem read first when session_id is known (cross-session safe)
+        if session_id and _base is not None:
+            file_dir = _base / app_name / user_id / session_id / filename
+            versions = sorted(
+                (v for v in file_dir.iterdir() if v.is_dir() and v.name.isdigit()),
+                key=lambda v: int(v.name),
+            ) if file_dir.exists() else []
+            if versions:
+                data_path = versions[-1] / "data"
+                if data_path.exists():
+                    raw = data_path.read_bytes()
+                    url = match.get("url", "")
+                    try:
+                        return {"filename": filename, "session_id": session_id, "url": url, "text": raw.decode("utf-8")}
+                    except UnicodeDecodeError:
+                        return {"filename": filename, "session_id": session_id, "url": url, "error": "File is binary. Use the URL to download it."}
+
         part = await tool_context.load_artifact(filename=filename)
-        if part is None and _base is not None:
-            # cross-session fallback — search filesystem
-            session_id = match.get("session_id") or ""
-            if session_id:
-                from pathlib import Path as _P
-                file_dir = _base / app_name / user_id / session_id / filename
-                versions = sorted(
-                    (v for v in file_dir.iterdir() if v.is_dir() and v.name.isdigit()),
-                    key=lambda v: int(v.name),
-                ) if file_dir.exists() else []
-                if versions:
-                    data_path = versions[-1] / "data"
-                    if data_path.exists():
-                        raw = data_path.read_bytes()
-                        try:
-                            return {"filename": filename, "url": match.get("url", ""), "text": raw.decode("utf-8")}
-                        except UnicodeDecodeError:
-                            return {"filename": filename, "url": match.get("url", ""), "error": "File is binary. Use the URL to download it."}
         if part is None:
             return {"error": f"Artifact '{filename}' not found."}
         if part.text is not None:

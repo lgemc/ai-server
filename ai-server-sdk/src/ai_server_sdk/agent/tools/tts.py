@@ -27,7 +27,10 @@ def make_tts_tools(client: TTSClient, **kwargs) -> list:
         Returns:
             dict with 'artifact' (filename) and 'bytes' (audio length).
         """
-        resp = await client.synthesize_async(text, voice=TTSVoice(voice))
+        try:
+            resp = await client.synthesize_async(text, voice=TTSVoice(voice))
+        except Exception as e:
+            return {"error": f"TTS service unavailable: {e}"}
 
         filename = output_filename or f"speech_{voice}.mp3"
         await tool_context.save_artifact(

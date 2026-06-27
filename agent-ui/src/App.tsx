@@ -70,6 +70,10 @@ export default function App() {
     loadSessions()
   }, [loadSessions])
 
+  const handleStreamDone = useCallback(() => {
+    if (activeId) loadSession(activeId)
+  }, [activeId, loadSession])
+
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <Sidebar
@@ -85,6 +89,7 @@ export default function App() {
         messages={messages}
         onMessagesUpdate={handleMessagesUpdate}
         onArtifactsChange={refreshArtifacts}
+        onStreamDone={handleStreamDone}
       />
       {activeId && <ArtifactPanel sessionId={activeId} artifacts={artifacts} />}
     </div>

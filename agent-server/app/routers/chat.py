@@ -4,10 +4,12 @@ import logging
 import traceback
 from typing import AsyncIterator
 
+
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from google.genai import types
+from google.adk.agents.run_config import RunConfig, StreamingMode
 
 from .. import config
 
@@ -46,32 +48,44 @@ async def chat(session_id: str, body: ChatRequest, req: Request):
 
 
 async def _stream_events(runner, session_id: str, new_message: types.Content) -> AsyncIterator[str]:
-    try:
-        log.info("chat start session=%s model=%s", session_id, config.MODEL)
+    log.info("chat start session=%s model=%s", session_id, config.MODEL)
+    yield _sse("status", {"state": "thinking"})
 
-        adk_iter = runner.run_async(
+    sent_partial_text = False
+    event_count = 0
+
+    try:
+        async for event in runner.run_async(
             user_id=config.USER_ID,
             session_id=session_id,
             new_message=new_message,
-        )
-
-        # Wrap the ADK iterator with keepalive pings every 25s so nginx
-        # (proxy_read_timeout) and browsers never see a silent connection.
-        async for event in _with_keepalive(adk_iter, interval=25):
-            if event is None:
-                # keepalive tick — send SSE comment (browsers ignore it)
-                yield ": keepalive\n\n"
-                continue
+            run_config=RunConfig(streaming_mode=StreamingMode.SSE),
+        ):
+            event_count += 1
+            log.info(
+                "adk event #%d author=%s partial=%s has_content=%s",
+                event_count, event.author, event.partial, bool(event.content),
+            )
 
             if not event.content or not event.content.parts:
                 continue
 
+            is_partial = event.partial is True
+
             for part in event.content.parts:
                 if part.text:
-                    if getattr(part, "thought", False):
-                        yield _sse("thinking", {"content": part.text})
-                    else:
-                        yield _sse("text", {"content": part.text, "author": event.author})
+                    thought = getattr(part, "thought", False)
+                    if is_partial:
+                        if thought:
+                            yield _sse("thinking", {"content": part.text})
+                        else:
+                            sent_partial_text = True
+                            yield _sse("text", {"content": part.text, "author": event.author})
+                    elif not sent_partial_text:
+                        if thought:
+                            yield _sse("thinking", {"content": part.text})
+                        else:
+                            yield _sse("text", {"content": part.text, "author": event.author})
 
                 elif part.function_call:
                     log.info("tool_call name=%s args=%s", part.function_call.name, part.function_call.args)
@@ -95,29 +109,13 @@ async def _stream_events(runner, session_id: str, new_message: types.Content) ->
         log.info("chat done session=%s", session_id)
         yield _sse("done", {})
 
+    except (asyncio.CancelledError, GeneratorExit):
+        log.debug("chat cancelled after %d events session=%s", event_count, session_id)
+        raise
     except Exception as e:
         short = _friendly(e)
         log.error("chat error session=%s: %s\n%s", session_id, short, traceback.format_exc())
         yield _sse("error", {"message": short, "detail": traceback.format_exc()})
-
-
-async def _with_keepalive(aiter, interval: int = 25):
-    """Interleave None ticks every `interval` seconds with items from aiter."""
-    sentinel = object()
-    it = aiter.__aiter__()
-    pending_event = asyncio.ensure_future(it.__anext__())
-    try:
-        while True:
-            try:
-                result = await asyncio.wait_for(asyncio.shield(pending_event), timeout=interval)
-                pending_event = asyncio.ensure_future(it.__anext__())
-                yield result
-            except asyncio.TimeoutError:
-                yield None  # keepalive tick
-            except StopAsyncIteration:
-                return
-    finally:
-        pending_event.cancel()
 
 
 def _friendly(e: Exception) -> str:

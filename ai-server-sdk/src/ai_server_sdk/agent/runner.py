@@ -23,6 +23,8 @@ def create_runner(
         "and answer questions. "
         "IMPORTANT: Respond directly and concisely. Never narrate your thought process "
         "or explain what you are about to do — just do it. "
+        "Only call synthesize_speech when the user explicitly asks for audio output — "
+        "never synthesize speech automatically as part of summaries or other tasks. "
         "When working with files, always save results as artifacts and tell the user "
         "the download URL for each file you create. "
         "When the user asks which files exist or what files are available, ALWAYS call "

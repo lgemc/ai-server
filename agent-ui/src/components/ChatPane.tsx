@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Message, Artifact, SSEEvent } from '../api/client'
@@ -69,11 +70,13 @@ interface Props {
   messages: Message[]
   onMessagesUpdate: (next: Message[] | ((prev: Message[]) => Message[])) => void
   onArtifactsChange: () => void
+  onStreamDone?: () => void
 }
 
-export function ChatPane({ sessionId, messages, onMessagesUpdate, onArtifactsChange }: Props) {
+export function ChatPane({ sessionId, messages, onMessagesUpdate, onArtifactsChange, onStreamDone }: Props) {
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
+  const [agentState, setAgentState] = useState<string | null>(null)
   const [streamBuffer, setStreamBuffer] = useState('')
   const [thinkBuffer, setThinkBuffer] = useState('')
   const [toolActivity, setToolActivity] = useState<ToolActivity | null>(null)
@@ -98,6 +101,7 @@ export function ChatPane({ sessionId, messages, onMessagesUpdate, onArtifactsCha
     }
     onMessagesUpdate([...messages, userMsg])
     setStreaming(true)
+    setAgentState(null)
     setStreamBuffer('')
     setThinkBuffer('')
     setToolActivity(null)
@@ -105,12 +109,16 @@ export function ChatPane({ sessionId, messages, onMessagesUpdate, onArtifactsCha
     let buffer = ''
     let thinking = ''
     const abort = api.streamChat(sessionId, text, (e: SSEEvent) => {
-      if (e.type === 'text') {
+      if (e.type === 'status') {
+        setAgentState(e.state ?? null)
+      } else if (e.type === 'text') {
+        setAgentState(null)
         buffer += e.content
-        setStreamBuffer(buffer)
+        flushSync(() => setStreamBuffer(buffer))
       } else if (e.type === 'thinking') {
+        setAgentState(null)
         thinking += e.content
-        setThinkBuffer(thinking)
+        flushSync(() => setThinkBuffer(thinking))
       } else if (e.type === 'tool_call') {
         setToolActivity({ name: e.name, status: 'running' })
       } else if (e.type === 'tool_result') {
@@ -131,7 +139,9 @@ export function ChatPane({ sessionId, messages, onMessagesUpdate, onArtifactsCha
       setStreamBuffer('')
       setThinkBuffer('')
       setToolActivity(null)
+      setAgentState(null)
       setStreaming(false)
+      onStreamDone?.()
     })
     abortRef.current = abort
   }
@@ -174,6 +184,16 @@ export function ChatPane({ sessionId, messages, onMessagesUpdate, onArtifactsCha
                 <code style={{ color: 'var(--accent2)' }}>{toolActivity.name}</code>
                 {toolActivity.status === 'running' && <span style={{ marginLeft: 6 }}>⋯</span>}
               </span>
+            </div>
+          )}
+
+          {agentState === 'thinking' && !thinkBuffer && !streamBuffer && (
+            <div style={assistantBubble}>
+              <div style={bubbleLabel}>Assistant</div>
+              <div style={{ color: 'var(--text2)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span className="thinking-spinner" />
+                <span>Thinking…</span>
+              </div>
             </div>
           )}
 
@@ -238,6 +258,8 @@ export function ChatPane({ sessionId, messages, onMessagesUpdate, onArtifactsCha
         .md-content th,.md-content td { border: 1px solid var(--border); padding: 6px 10px; }
         .md-content th { background: var(--bg3); font-weight: 600; }
         .md-content hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+        .thinking-spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0; }
+        @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
     </div>
   )

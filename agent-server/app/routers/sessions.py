@@ -1,4 +1,7 @@
+import time
+
 from fastapi import APIRouter, Request, HTTPException
+from google.adk.events import Event, EventActions
 from pydantic import BaseModel
 from typing import Optional
 
@@ -55,11 +58,13 @@ async def rename_session(session_id: str, req: Request, body: CreateSessionReque
     )
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    await runner.session_service.append_to_session(
-        app_name=config.APP_NAME,
-        user_id=config.USER_ID,
-        session_id=session_id,
-        state_delta={"title": body.title},
+    await runner.session_service.append_event(
+        session=session,
+        event=Event(
+            author=config.APP_NAME,
+            actions=EventActions(state_delta={"title": body.title}),
+            timestamp=time.time(),
+        ),
     )
     return {"ok": True}
 
