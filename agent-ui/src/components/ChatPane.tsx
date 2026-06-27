@@ -208,13 +208,6 @@ export function ChatPane({ sessionId, messages, onMessagesUpdate, onArtifactsCha
             </div>
           )}
 
-          {streamBuffer && (
-            <div style={assistantBubble}>
-              <div style={bubbleLabel}>Assistant</div>
-              <MarkdownContent text={streamBuffer} streaming />
-            </div>
-          )}
-
           <div ref={bottomRef} />
         </div>
       </div>
