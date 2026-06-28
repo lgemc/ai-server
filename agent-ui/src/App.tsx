@@ -78,7 +78,7 @@ export default function App() {
   }, [loadSessions])
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+    <div className="flex h-screen overflow-hidden">
       <button className="menu-btn" onClick={() => setSidebarOpen(true)} aria-label="Open menu">☰</button>
       <div className={`sidebar-backdrop${sidebarOpen ? ' open' : ''}`} onClick={() => setSidebarOpen(false)} />
       <Sidebar

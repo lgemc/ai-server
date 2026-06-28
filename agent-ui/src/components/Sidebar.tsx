@@ -29,20 +29,17 @@ export function Sidebar({ sessions, activeId, onSelect, onCreate, onDelete, onRe
   const sorted = [...sessions].sort((a, b) => b.last_update_time - a.last_update_time)
 
   return (
-    <aside className={`sidebar${isOpen ? ' open' : ''}`} style={{
-      width: 240, minWidth: 240, background: 'var(--bg2)', borderRight: '1px solid var(--border)',
-      display: 'flex', flexDirection: 'column', height: '100%',
-    }}>
-      <div style={{ padding: '16px 12px 12px', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent2)', marginBottom: 10, letterSpacing: '0.05em' }}>
+    <aside className={`sidebar${isOpen ? ' open' : ''} w-[240px] min-w-[240px] bg-[var(--bg2)] border-r border-[var(--border)] flex flex-col h-full`}>
+      <div className="p-[16px_12px_12px] border-b border-[var(--border)]">
+        <div className="text-[13px] font-semibold text-[var(--accent2)] mb-[10px] tracking-wider">
           AI AGENT
         </div>
-        <button onClick={onCreate} style={newChatBtn}>+ New chat</button>
+        <button onClick={onCreate} className="w-full px-3 py-2 bg-[var(--accent)] text-white border-none rounded-md cursor-pointer text-[13px] font-medium">+ New chat</button>
       </div>
 
-      <div style={{ overflowY: 'auto', flex: 1, padding: '8px 6px' }}>
+      <div className="overflow-y-auto flex-1 p-[8px_6px]">
         {sorted.length === 0 && (
-          <div style={{ color: 'var(--text2)', fontSize: 13, textAlign: 'center', marginTop: 24 }}>
+          <div className="text-[var(--text2)] text-[13px] text-center mt-6">
             No sessions yet
           </div>
         )}
@@ -50,11 +47,9 @@ export function Sidebar({ sessions, activeId, onSelect, onCreate, onDelete, onRe
           <div
             key={s.id}
             onClick={() => onSelect(s.id)}
-            style={{
-              ...sessionItem,
-              background: activeId === s.id ? 'var(--bg3)' : 'transparent',
-              borderColor: activeId === s.id ? 'var(--accent)' : 'transparent',
-            }}
+            className={`flex items-center gap-1.5 p-2 rounded-md cursor-pointer mb-[2px] border-transparent transition-colors duration-150 ${
+              activeId === s.id ? 'bg-[var(--bg3)] border-[var(--accent)]' : 'bg-transparent border-transparent'
+            }`}
           >
             {editing === s.id ? (
               <input
@@ -64,16 +59,16 @@ export function Sidebar({ sessions, activeId, onSelect, onCreate, onDelete, onRe
                 onBlur={() => commitEdit(s.id)}
                 onKeyDown={e => { if (e.key === 'Enter') commitEdit(s.id); if (e.key === 'Escape') setEditing(null) }}
                 onClick={e => e.stopPropagation()}
-                style={editInput}
+                className="flex-1 min-w-0 text-[13px] overflow-hidden text-ellipsis whitespace-nowrap"
               />
             ) : (
               <>
-                <span style={{ flex: 1, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span className="flex-1 text-[13px] overflow-hidden text-ellipsis whitespace-nowrap">
                   {s.title}
                 </span>
-                <span style={{ color: 'var(--text2)', fontSize: 11 }}>{s.message_count}msg</span>
-                <button onClick={e => startEdit(s, e)} style={iconBtn} title="Rename">✎</button>
-                <button onClick={e => { e.stopPropagation(); onDelete(s.id) }} style={{ ...iconBtn, color: 'var(--danger)' }} title="Delete">✕</button>
+                <span className="text-[var(--text2)] text-[11px]">{s.message_count}msg</span>
+                <button onClick={e => startEdit(s, e)} className="bg-none border-none cursor-pointer text-[var(--text2)] text-[13px] p-[2px_4px] rounded-sm flex-shrink-0" title="Rename">✎</button>
+                <button onClick={e => { e.stopPropagation(); onDelete(s.id) }} className="bg-none border-none cursor-pointer text-[var(--danger)] text-[13px] p-[2px_4px] rounded-sm flex-shrink-0" title="Delete">✕</button>
               </>
             )}
           </div>
@@ -83,23 +78,4 @@ export function Sidebar({ sessions, activeId, onSelect, onCreate, onDelete, onRe
   )
 }
 
-const newChatBtn: React.CSSProperties = {
-  width: '100%', padding: '8px 12px', background: 'var(--accent)', color: '#fff',
-  border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500,
-}
 
-const sessionItem: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 6, padding: '8px 8px',
-  borderRadius: 6, cursor: 'pointer', marginBottom: 2,
-  border: '1px solid transparent', transition: 'background 0.15s',
-}
-
-const iconBtn: React.CSSProperties = {
-  background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text2)',
-  fontSize: 13, padding: '2px 4px', borderRadius: 4, flexShrink: 0,
-}
-
-const editInput: React.CSSProperties = {
-  flex: 1, background: 'var(--bg3)', border: '1px solid var(--accent)',
-  borderRadius: 4, color: 'var(--text)', fontSize: 13, padding: '2px 6px', outline: 'none',
-}

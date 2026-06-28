@@ -164,23 +164,12 @@ export function ChatPane({ sessionId, messages, onMessagesUpdate, onArtifactsCha
 
   if (!sessionId) {
     return (
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, padding: '0 24px', textAlign: 'center' }}>
-        <div style={{ fontSize: 32, marginBottom: 4 }}>🤖</div>
-        <div style={{ fontSize: 15, color: 'var(--text2)' }}>Select or create a session to start chatting</div>
+      <div className="flex-1 flex items-center justify-center flex-col gap-4 p-0 md:px-6 text-center">
+        <div className="text-[32px] mb-1">🤖</div>
+        <div className="text-[15px] text-[var(--text2)]">Select or create a session to start chatting</div>
         <button
           onClick={onCreate}
-          style={{
-            padding: '10px 24px',
-            background: 'var(--accent)',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 6,
-            cursor: 'pointer',
-            fontSize: 14,
-            fontWeight: 500,
-            maxWidth: 240,
-            width: '100%',
-          }}
+          className="px-5 py-2.5 bg-[var(--accent)] text-white border-none rounded-md cursor-pointer text-[14px] font-medium max-w-[240px] w-full"
         >
           + New chat
         </button>
@@ -189,14 +178,14 @@ export function ChatPane({ sessionId, messages, onMessagesUpdate, onArtifactsCha
   }
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 0' }}>
-        <div style={{ maxWidth: 760, margin: '0 auto', padding: '0 24px' }}>
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto py-6">
+        <div className="max-w-[760px] mx-auto px-6">
           {messages.length === 0 && !streaming && (
-            <div style={{ textAlign: 'center', color: 'var(--text2)', marginTop: 60 }}>
-              <div style={{ fontSize: 32, marginBottom: 12 }}>🤖</div>
-              <div style={{ fontSize: 15 }}>What can I help you with?</div>
-              <div style={{ fontSize: 13, marginTop: 6, color: 'var(--text2)' }}>
+            <div className="text-center text-[var(--text2)] mt-16">
+              <div className="text-[32px] mb-3">🤖</div>
+              <div className="text-[15px]">What can I help you with?</div>
+              <div className="text-[13px] mt-1.5 text-[var(--text2)]">
                 Try: "Transcribe this YouTube video: ..." or "What files do we have?"
               </div>
             </div>
@@ -205,31 +194,31 @@ export function ChatPane({ sessionId, messages, onMessagesUpdate, onArtifactsCha
           {messages.map(msg => <MessageBubble key={msg.id} msg={msg} />)}
 
           {streaming && streamBuffer && (
-            <div style={{ ...messageRow, justifyContent: 'flex-start' }}>
-              <div style={assistantBubble}>
-                <div style={bubbleLabel}>Assistant</div>
+            <div className="flex mt-4 justify-start">
+              <div className="max-w-[82%] p-3 pr-4 rounded-tl-2xl rounded-tr-xl rounded-br-xl bg-[var(--bg3)] border border-[var(--border)] mb-4">
+                <div className="text-[11px] font-semibold text-[var(--text2)] mb-1.5 uppercase tracking-wide">Assistant</div>
                 <MarkdownContent text={streamBuffer} streaming />
               </div>
             </div>
           )}
 
           {toolActivity && (
-            <div style={toolBox}>
+            <div className="flex items-center gap-1.5 p-2 bg-[var(--tool-bg)] border border-[var(--tool-border)] rounded-lg mb-3 text-[12px]">
               <span style={{ color: toolActivity.status === 'running' ? 'var(--accent2)' : '#6acc6a' }}>
                 {toolActivity.status === 'running' ? '⚙ ' : '✓ '}
               </span>
-              <span style={{ fontSize: 12, color: 'var(--text2)' }}>
+              <span className="text-[var(--text2)]">
                 {toolActivity.status === 'running' ? 'Calling ' : 'Done: '}
-                <code style={{ color: 'var(--accent2)' }}>{toolActivity.name}</code>
-                {toolActivity.status === 'running' && <span style={{ marginLeft: 6 }}>⋯</span>}
+                <code className="text-[var(--accent2)]">{toolActivity.name}</code>
+                {toolActivity.status === 'running' && <span className="ml-1.5">⋯</span>}
               </span>
             </div>
           )}
 
           {agentState === 'thinking' && !thinkBuffer && !streamBuffer && (
-            <div style={assistantBubble}>
-              <div style={bubbleLabel}>Assistant</div>
-              <div style={{ color: 'var(--text2)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div className="max-w-[82%] p-3 pr-4 rounded-tl-2xl rounded-tr-xl rounded-br-xl bg-[var(--bg3)] border border-[var(--border)] mb-4">
+              <div className="text-[11px] font-semibold text-[var(--text2)] mb-1.5 uppercase tracking-wide">Assistant</div>
+              <div className="text-[var(--text2)] text-[13px] flex items-center gap-1.5">
                 <span className="thinking-spinner" />
                 <span>Thinking…</span>
               </div>
@@ -240,8 +229,8 @@ export function ChatPane({ sessionId, messages, onMessagesUpdate, onArtifactsCha
         </div>
       </div>
 
-      <div style={{ borderTop: '1px solid var(--border)', padding: '16px 24px', background: 'var(--bg)' }}>
-        <div style={{ maxWidth: 760, margin: '0 auto', display: 'flex', gap: 10 }}>
+      <div className="border-t border-[var(--border)] p-4 md:px-6 bg-[var(--bg)]">
+        <div className="max-w-[760px] mx-auto flex gap-2.5">
           <textarea
             ref={textareaRef}
             value={input}
@@ -250,14 +239,14 @@ export function ChatPane({ sessionId, messages, onMessagesUpdate, onArtifactsCha
             placeholder="Message the agent… (Enter to send, Shift+Enter for newline)"
             disabled={streaming}
             rows={1}
-            style={inputStyle}
+            className="flex-1 bg-[var(--bg3)] border border-[var(--border)] rounded-[10px] text-[var(--text)] text-[14px] p-3 resize-none outline-none leading-5 font-inherit"
             onInput={e => {
               const t = e.currentTarget
               t.style.height = 'auto'
               t.style.height = Math.min(t.scrollHeight, 160) + 'px'
             }}
           />
-          <button onClick={send} disabled={!input.trim() || streaming} style={sendBtn}>
+          <button onClick={send} disabled={!input.trim() || streaming} className="w-10 h-10 self-end bg-[var(--accent)] border-none rounded-[10px] text-white text-[18px] cursor-pointer flex items-center justify-center">
             {streaming ? '…' : '↑'}
           </button>
         </div>

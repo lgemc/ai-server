@@ -1,4 +1,6 @@
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
   --bg: #0f0f0f;
@@ -14,6 +16,8 @@
   --tool-border: #2d4a1a;
   --danger: #c94040;
 }
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body, #root { height: 100%; font-family: system-ui, -apple-system, sans-serif; overflow: hidden; }
 body { background: var(--bg); color: var(--text); }
