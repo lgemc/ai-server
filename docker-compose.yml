@@ -229,7 +229,8 @@ services:
   # Download model first: huggingface-cli download nvidia/Qwen3.6-35B-A3B-NVFP4
   # Start with: docker compose up qwen36-35b
   qwen36-35b:
-    image: vllm/vllm-openai:cu130-nightly
+    #image: vllm/vllm-openai:cu130-nightly
+    image: vllm/vllm-openai:nightly
     container_name: qwen36-35b
     restart: "no"
     ports:
@@ -249,10 +250,69 @@ services:
       --host 0.0.0.0
       --port 8000
       --tensor-parallel-size 1
-      --gpu-memory-utilization 0.5
+      --gpu-memory-utilization 0.78
       --max-model-len 131072
-      --max-num-seqs 32
-      --max-num-batched-tokens 8192
+      --max-num-seqs 64
+      --max-num-batched-tokens 32768
+      --quantization compressed-tensors
+      --kv-cache-dtype fp8
+      --moe-backend flashinfer_cutlass
+      --attention-backend FLASHINFER
+      --enable-chunked-prefill
+      --enable-prefix-caching
+      --speculative-config '{"method":"mtp","num_speculative_tokens":3}'
+      --trust-remote-code
+      --reasoning-parser qwen3
+      --tool-call-parser qwen3_coder
+      --enable-auto-tool-choice
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 600s
+
+  # ===========================================
+  # Qwen-AgentWorld-35B-A3B - NVFP4 (MoE + MTP speculative decoding)
+  # ===========================================
+  # Cannot run alongside vllm, vllm-mxfp4, nemotron, qwen35, qwen35-autoround, or qwen36-35b (1 GPU).
+  # Download model first: huggingface-cli download sakamakismile/Qwen-AgentWorld-35B-A3B-NVFP4
+  # Start with: docker compose up qwen-agentworld
+  qwen-agentworld:
+    image: vllm/vllm-openai:nightly
+    container_name: qwen-agentworld
+    restart: "no"
+    ports:
+      - "8011:8000"
+    volumes:
+      - ./vllm/models:/root/.cache/huggingface
+      - ./vllm/torch_compile_cache_qwen_agentworld:/root/.cache/vllm/torch_compile_cache
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,display
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}
+      - HF_HOME=/root/.cache/huggingface
+      - VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
+      - PYTHONUNBUFFERED=1
+    command: >
+      --model sakamakismile/Qwen-AgentWorld-35B-A3B-NVFP4
+      --host 0.0.0.0
+      --port 8000
+      --tensor-parallel-size 1
+      --gpu-memory-utilization 0.78
+      --max-model-len 131072
+      --max-num-seqs 64
+      --max-num-batched-tokens 32768
       --quantization compressed-tensors
       --kv-cache-dtype fp8
       --moe-backend flashinfer_cutlass
@@ -541,8 +601,8 @@ services:
       - "8080:8080"
     environment:
       # OpenAI-compatible backends (vLLM + vLLM-MXFP4), semicolon-separated
-      - OPENAI_API_BASE_URLS=http://vllm:8000/v1;http://vllm-mxfp4:8000/v1;http://nemotron:8000/v1;http://qwen35:8000/v1;http://qwen35-autoround:8000/v1;http://qwen36-35b:8000/v1
-      - OPENAI_API_KEYS=not-needed;not-needed;not-needed;not-needed;not-needed;not-needed
+      - OPENAI_API_BASE_URLS=http://vllm:8000/v1;http://vllm-mxfp4:8000/v1;http://nemotron:8000/v1;http://qwen35:8000/v1;http://qwen35-autoround:8000/v1;http://qwen36-35b:8000/v1;http://qwen-agentworld:8000/v1
+      - OPENAI_API_KEYS=not-needed;not-needed;not-needed;not-needed;not-needed;not-needed;not-needed
     volumes:
       - ./open-webui/data:/app/backend/data:Z
     networks:

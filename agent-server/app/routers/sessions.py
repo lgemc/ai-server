@@ -97,13 +97,17 @@ def _session_detail(s) -> dict:
         role = event.content.role or event.author
         if role not in ("user", "model"):
             continue
-        text_parts = [p.text for p in event.content.parts if p.text]
+        thinking_parts = [p.text for p in event.content.parts if p.text and getattr(p, 'thought', False)]
+        text_parts = [p.text for p in event.content.parts if p.text and not getattr(p, 'thought', False)]
         if not text_parts:
             continue
+        content = " ".join(text_parts)
+        if thinking_parts:
+            content = f"<think>{''.join(thinking_parts)}</think>\n\n{content}"
         messages.append({
             "id": event.id,
             "role": "assistant" if role == "model" else "user",
-            "content": " ".join(text_parts),
+            "content": content,
             "timestamp": event.timestamp,
         })
     return {**_session_summary(s), "messages": messages}

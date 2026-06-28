@@ -8,9 +8,10 @@ interface Props {
   onCreate: () => void
   onDelete: (id: string) => void
   onRename: (id: string, title: string) => void
+  isOpen?: boolean
 }
 
-export function Sidebar({ sessions, activeId, onSelect, onCreate, onDelete, onRename }: Props) {
+export function Sidebar({ sessions, activeId, onSelect, onCreate, onDelete, onRename, isOpen }: Props) {
   const [editing, setEditing] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
 
@@ -28,7 +29,7 @@ export function Sidebar({ sessions, activeId, onSelect, onCreate, onDelete, onRe
   const sorted = [...sessions].sort((a, b) => b.last_update_time - a.last_update_time)
 
   return (
-    <aside style={{
+    <aside className={`sidebar${isOpen ? ' open' : ''}`} style={{
       width: 240, minWidth: 240, background: 'var(--bg2)', borderRight: '1px solid var(--border)',
       display: 'flex', flexDirection: 'column', height: '100%',
     }}>

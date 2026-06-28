@@ -76,7 +76,11 @@ def create_runner(
 
     agent = LlmAgent(
         name=app_name,
-        model=LiteLlm(model=model),
+        model=LiteLlm(
+            model=model,
+            max_tokens=8192,
+            temperature=0.6,
+        ),
         instruction=instruction,
         tools=tools,
     )
