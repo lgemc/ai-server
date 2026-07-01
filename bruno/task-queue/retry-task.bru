@@ -1,0 +1,11 @@
+meta {
+  name: Retry Failed Task
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{task_api_url}}/tasks/{{task_id}}/retry
+  body: none
+  auth: none
+}

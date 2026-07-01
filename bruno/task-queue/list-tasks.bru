@@ -1,0 +1,18 @@
+meta {
+  name: List Tasks
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{task_api_url}}/tasks
+  body: none
+  auth: none
+}
+
+query {
+  status: 
+  type: 
+  limit: 50
+  offset: 0
+}

@@ -286,7 +286,7 @@ services:
   # Qwen-AgentWorld-35B-A3B - NVFP4 (MoE + MTP speculative decoding)
   # ===========================================
   # Cannot run alongside vllm, vllm-mxfp4, nemotron, qwen35, qwen35-autoround, or qwen36-35b (1 GPU).
-  # Download model first: huggingface-cli download sakamakismile/Qwen-AgentWorld-35B-A3B-NVFP4
+  # Download model first: huggingface-cli download lgmc/Qwen-AgentWorld-35B-A3B-NVFP4-MTP
   # Start with: docker compose up qwen-agentworld
   qwen-agentworld:
     image: vllm/vllm-openai:nightly
@@ -305,7 +305,7 @@ services:
       - VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
       - PYTHONUNBUFFERED=1
     command: >
-      --model sakamakismile/Qwen-AgentWorld-35B-A3B-NVFP4
+      --model lgmc/Qwen-AgentWorld-35B-A3B-NVFP4-MTP
       --host 0.0.0.0
       --port 8000
       --tensor-parallel-size 1
@@ -340,6 +340,115 @@ services:
       timeout: 10s
       retries: 3
       start_period: 600s
+
+  # ===========================================
+  # Atlas — Qwen-AgentWorld-35B-A3B-NVFP4-MTP (native MTP speculative decoding)
+  # ===========================================
+  # Pre-built Atlas image — no local build required.
+  # Cannot run alongside any other GPU service (1 GPU).
+  # Download model first: huggingface-cli download lgmc/Qwen-AgentWorld-35B-A3B-NVFP4-MTP
+  # Start with: docker compose up atlas-agentworld
+  atlas-agentworld:
+    build:
+      context: ./atlas
+      dockerfile: docker/gb10/qwen3.5-35b-a3b/nvfp4/Dockerfile
+    image: atlas-agentworld:local
+    container_name: atlas-agentworld
+    restart: "no"
+    ports:
+      - "8012:8888"
+    volumes:
+      - ./vllm/models:/root/.cache/huggingface
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,display
+      - RUST_LOG=info
+    command: >
+      serve lgmc/Qwen-AgentWorld-35B-A3B-NVFP4-MTP
+      --port 8888
+      --bind 0.0.0.0
+      --max-seq-len 65536
+      --gpu-memory-utilization 0.88
+      --kv-cache-dtype fp8
+      --kv-high-precision-layers auto
+      --speculative
+      --num-drafts 1
+      --mtp-quantization bf16
+      --enable-prefix-caching
+      --scheduling-policy slai
+      --tool-call-parser qwen3_coder
+      --oom-guard-mb 1024
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/v1/models"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # ===========================================
+  # SGLang - Qwen-AgentWorld-35B-A3B-NVFP4-MTP (native MTP speculative decoding)
+  # ===========================================
+  # Cannot run alongside any other GPU service (1 GPU).
+  # Download model first: huggingface-cli download lgmc/Qwen-AgentWorld-35B-A3B-NVFP4-MTP
+  # Start with: docker compose up sglang-agentworld
+  sglang-agentworld:
+    image: scitrera/dgx-spark-sglang:0.5.9-t5
+    container_name: sglang-agentworld
+    restart: "no"
+    ports:
+      - "8013:30000"
+    volumes:
+      - ./vllm/models:/root/.cache/huggingface
+      - ./sglang/torch_compile_cache_agentworld:/root/.cache/sglang
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,display
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}
+      - HF_HOME=/root/.cache/huggingface
+      - PYTHONUNBUFFERED=1
+    command: >
+      python3 -m sglang.launch_server
+      --model-path lgmc/Qwen-AgentWorld-35B-A3B-NVFP4-MTP
+      --host 0.0.0.0
+      --port 30000
+      --tensor-parallel-size 1
+      --mem-fraction-static 0.88
+      --max-total-tokens 131072
+      --max-running-requests 64
+      --quantization compressed-tensors
+      --kv-cache-dtype fp8_e4m3
+      --attention-backend triton
+      --chunked-prefill-size 32768
+      --enable-mixed-chunk
+      --reasoning-parser qwen3
+      --tool-call-parser qwen3_coder
+      --trust-remote-code
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:30000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
 
   # ===========================================
   # Qwen3.5-122B-A10B - INT4-AutoRound (Intel AutoRound quantization)
@@ -601,8 +710,8 @@ services:
       - "8080:8080"
     environment:
       # OpenAI-compatible backends (vLLM + vLLM-MXFP4), semicolon-separated
-      - OPENAI_API_BASE_URLS=http://vllm:8000/v1;http://vllm-mxfp4:8000/v1;http://nemotron:8000/v1;http://qwen35:8000/v1;http://qwen35-autoround:8000/v1;http://qwen36-35b:8000/v1;http://qwen-agentworld:8000/v1
-      - OPENAI_API_KEYS=not-needed;not-needed;not-needed;not-needed;not-needed;not-needed;not-needed
+      - OPENAI_API_BASE_URLS=http://vllm:8000/v1;http://vllm-mxfp4:8000/v1;http://nemotron:8000/v1;http://qwen35:8000/v1;http://qwen35-autoround:8000/v1;http://qwen36-35b:8000/v1;http://qwen-agentworld:8000/v1;http://atlas-agentworld:8888/v1;http://sglang-agentworld:30000/v1
+      - OPENAI_API_KEYS=not-needed;not-needed;not-needed;not-needed;not-needed;not-needed;not-needed;not-needed;not-needed
     volumes:
       - ./open-webui/data:/app/backend/data:Z
     networks:
@@ -1163,6 +1272,66 @@ services:
     networks:
       - ai-network
 
+# ===========================================
+  # Redis - Message Queue & Cache
+  # ===========================================
+  redis:
+    image: redis:7.2-alpine
+    container_name: redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ===========================================
+  # Task API — HTTP interface to submit/query tasks
+  # ===========================================
+  task-api:
+    build:
+      context: ./task_queue
+      dockerfile: Dockerfile.api
+    container_name: task-api
+    restart: unless-stopped
+    ports:
+      - "8092:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_URL=redis://redis:6379
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ===========================================
+  # Task Worker — picks up tasks and runs handlers (whisper, etc.)
+  # ===========================================
+  task-worker:
+    build:
+      context: ./task_queue
+      dockerfile: Dockerfile.worker
+    container_name: task-worker
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - WHISPER_BASE_URL=http://whisper-api:8003
+      - POLL_INTERVAL=1.0
+    networks:
+      - ai-network
+
 networks:
   ai-network:
     driver: bridge
@@ -1177,3 +1346,4 @@ volumes:
   agent-artifacts:
   langfuse-postgres:
   langfuse-clickhouse:
+  redis-data:

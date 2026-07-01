@@ -1,0 +1,23 @@
+meta {
+  name: Submit Transcription Task
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{task_api_url}}/tasks
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "type": "transcription",
+    "payload": {
+      "url": "https://example.com/audio.mp3",
+      "language": "en",
+      "word_timestamps": false
+    },
+    "priority": 0
+  }
+}
