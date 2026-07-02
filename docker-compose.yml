@@ -1365,8 +1365,10 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379
       - VOCAB_DIR=/app/vocab_words
+      - QUIZ_DB=/app/quiz_data/quiz.db
     volumes:
       - ./vocab/words:/app/vocab_words
+      - ./quiz_data:/app/quiz_data
     networks:
       - ai-network
     healthcheck:

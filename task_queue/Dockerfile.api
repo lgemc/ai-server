@@ -11,6 +11,8 @@ RUN pip install --no-cache-dir \
 COPY task_store.py .
 COPY task_api.py .
 COPY vocab_api.py .
+COPY quiz_api.py .
+COPY quiz_engine.py .
 
 EXPOSE 8080
 
