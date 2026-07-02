@@ -18,8 +18,10 @@ from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 
 from task_store import TaskStore
+from vocab_api import app as vocab_app
 
 app = FastAPI(title="Task Queue API", version="1.0.0")
+app.mount("/vocab", vocab_app)
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379")
 store = TaskStore(redis_url=REDIS_URL)
